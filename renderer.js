@@ -18,9 +18,26 @@ class Sphere {
         this.px = x;
         this.py = y;
         this.pz = z;
-        this.r = 100
+        this.r = 100;
     }
-    
+
+    distance(x,y) {
+        return Math.sqrt(Math.pow(x - this.px, 2) + Math.pow(y - this.py, 2));
+    }
+
+    footprintContains(x, y) {
+        if (Math.abs(this.px - x) < this.r && Math.abs(this.py - y) < this.r) {
+            return this.distance(x,y) < this.r;
+        }
+        return false;
+    }
+
+    getBounds(x, y) {
+        var d = this.distance(x,y);
+        var normalizedD = Math.min(1, d / this.r);
+        var zDiff = Math.sin(Math.acos(normalizedD)) * this.r;
+        return [this.pz - zDiff, this.pz + zDiff];
+    }
 };
 
 // ---------------------------------------------
@@ -33,7 +50,7 @@ var map =
     shift:    10,  // power of two: 2^10 = 1024
     altitude: new Uint8Array(1024*1024), // 1024 * 1024 byte array with height information
     color:    new Uint32Array(1024*1024), // 1024 * 1024 int array with RGB colors
-    spheres: [new Sphere(0, 0, 50)]
+    spheres: [new Sphere(0, 0, 300)]
 };
 
 // ---------------------------------------------
@@ -293,54 +310,124 @@ function Flip()
 // ---------------------------------------------
 // The main render routine
 
-function Render()
-{
+function Render() {
     var mapwidthperiod = map.width - 1;
     var mapheightperiod = map.height - 1;
 
-    var screenwidth = screendata.canvas.width|0;
+    var screenWidth = screendata.canvas.width|0;
     var sinang = Math.sin(camera.angle);
     var cosang = Math.cos(camera.angle);
 
-    var hiddeny = new Int32Array(screenwidth);
-    for(var i=0; i<screendata.canvas.width|0; i=i+1|0)
-        hiddeny[i] = screendata.canvas.height;
+    var hiddeny = new Int32Array(screenWidth);
+    for(var sx=0; sx<screendata.canvas.width|0; sx=sx+1|0)
+        hiddeny[sx] = screendata.canvas.height;
 
     var deltaz = 1.;
+    var ddz = 0.005; // delta delta z
 
-    // Draw from front to back
-    for(var z=1; z<camera.distance; z+=deltaz)
-    {
+    // Initial dumb count of how many rows
+    var rowCount = 0;
+    for (var z = 1; z < camera.distance; z += deltaz) {
+        deltaz += ddz;
+        rowCount += 1;
+    }
+    console.log(rowCount);
+
+    // Record the hidden y values as they are after each row
+    var yMap = new Uint32Array(screenWidth * rowCount)
+
+    // Draw terrain from front to back
+    deltaz = 1;
+    var rowId = 0;
+    var zMap = new Array(rowCount);
+    for (var z=1; z<camera.distance; z+=deltaz) {
+        zMap[rowId] = z;
         // 90 degree field of view
+        // Coordinates of extremes
         var plx =  -cosang * z - sinang * z;
         var ply =   sinang * z - cosang * z;
         var prx =   cosang * z - sinang * z;
         var pry =  -sinang * z - cosang * z;
 
-        var dx = (prx - plx) / screenwidth;
-        var dy = (pry - ply) / screenwidth;
+        var dx = (prx - plx) / screenWidth;
+        var dy = (pry - ply) / screenWidth;
         plx += camera.x;
         ply += camera.y;
         var invz = 1. / z * 240.;
-        for(var i=0; i<screenwidth|0; i=i+1|0)
-        {
+        for(var sx = 0; sx < screenWidth|0; sx = sx + 1 | 0) {
             var mapoffset = ((Math.floor(ply) & mapwidthperiod) << map.shift) + (Math.floor(plx) & mapheightperiod)|0;
             var heightonscreen = (camera.height - map.altitude[mapoffset]) * invz + camera.horizon|0;
-            DrawVerticalLine(i, heightonscreen|0, hiddeny[i], map.color[mapoffset]);
-            if (heightonscreen < hiddeny[i]) hiddeny[i] = heightonscreen;
+            DrawVerticalLine(sx, heightonscreen|0, hiddeny[sx], map.color[mapoffset]);
+            if (heightonscreen < hiddeny[sx]) {
+                hiddeny[sx] = heightonscreen;
+            }
+            var yId =  rowId * screenWidth + sx;
+            yMap[yId] = hiddeny[sx];
             plx += dx;
             ply += dy;
         }
-        deltaz += 0.005;
+        deltaz += ddz; 
+        rowId += 1;
     }
+    var printFlag = true;;
+    // Draw Objects from back to front
+    for (var rowId = 0; rowId < rowCount; rowId++) {
+        var z = zMap[rowId];
+        var plx =  -cosang * z - sinang * z;
+        var ply =   sinang * z - cosang * z;
+        var prx =   cosang * z - sinang * z;
+        var pry =  -sinang * z - cosang * z;
+
+        var dx = (prx - plx) / screenWidth;
+        var dy = (pry - ply) / screenWidth;
+        plx += camera.x;
+        ply += camera.y;
+
+        var invz = 1. / z * 240.;
+        
+
+        for (var sx = 0; sx < screenWidth | 0; sx = sx + 1 | 0) {
+            var yId =  rowId * screenWidth + sx;
+            for (var i = 0; i < map.spheres.length; i++) {
+                var sphere = map.spheres[i];
+                
+                if (sphere.footprintContains(plx, ply)) {
+                    var bounds = sphere.getBounds(plx, ply);
+                    var syLow = (camera.height - bounds[0]) * invz + camera.horizon|0;
+                    var syHigh = (camera.height - bounds[1]) * invz + camera.horizon|0;
+                              
+                    syHigh = Math.min(syHigh, yMap[yId]);
+                    if (syLow < yMap[yId]) {
+                        if (printFlag) {
+                            console.log("===");
+                            console.log(ply);
+                            console.log(plx);
+                            console.log(sx);
+                            console.log(syLow);
+                            console.log(syHigh);
+                            console.log(yMap[yId]);
+                            
+                            printFlag = false;
+                        }  
+                        DrawVerticalLine(sx, syHigh, syLow, 0xFFFF0000);
+                    }
+                }
+            }
+            plx += dx;
+            ply += dy;
+        }
+    }
+    DrawVerticalLine(100,100,200,0xFFFF0000);
+    DrawVerticalLine(110,100,200,0xFF00FF00);
+    DrawVerticalLine(120,100,200,0xFF0000FF);
+    
 }
 
 
 // ---------------------------------------------
 // Draw the next frame
 
-function Draw()
-{
+function Draw() {
     updaterunning = true;
     UpdateCamera();
     DrawBackground();
@@ -348,11 +435,9 @@ function Draw()
     Flip();
     frames++;
 
-    if (!input.keypressed)
-    {
+    if (!input.keypressed) {
         updaterunning = false;
-    } else
-    {
+    } else {
         window.requestAnimationFrame(Draw, 0);
     }
 }
