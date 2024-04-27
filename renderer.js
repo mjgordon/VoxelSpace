@@ -102,7 +102,7 @@ var map =
     altitude: new Uint8Array(1024*1024), // 1024 * 1024 byte array with height information
     color:    new Uint32Array(1024*1024), // 1024 * 1024 int array with RGB colors
     spheres: [new Sphere(0, 0, 300)],
-    sunAngle: [Math.sqrt(2) / 2, 0, Math.sqrt(2) / 2]
+    sunAngle: [-Math.sqrt(2) / 2, 0, Math.sqrt(2) / 2]
 };
 
 // ---------------------------------------------
@@ -128,6 +128,7 @@ var input =
 {
     forwardbackward: 0,
     leftright:       0,
+    strafe:          0,
     updown:          0,
     lookup:          false,
     lookdown:        false,
@@ -150,19 +151,21 @@ function UpdateCamera()
     var current = new Date().getTime();
 
     input.keypressed = false;
-    if (input.leftright != 0)
-    {
+    if (input.leftright != 0) {
         camera.angle += input.leftright*0.1*(current-time)*0.03;
         input.keypressed = true;
     }
-    if (input.forwardbackward != 0)
-    {
+    if (input.forwardbackward != 0) {
         camera.x -= input.forwardbackward * Math.sin(camera.angle) * (current-time)*0.03;
         camera.y -= input.forwardbackward * Math.cos(camera.angle) * (current-time)*0.03;
         input.keypressed = true;
     }
-    if (input.updown != 0)
-    {
+    if (input.strafe != 0) {
+        camera.x -= input.strafe * Math.sin(camera.angle + (Math.PI / 2)) * (current-time)*0.03;
+        camera.y -= input.strafe * Math.cos(camera.angle + (Math.PI / 2)) * (current-time)*0.03;
+        input.keypressed = true;
+    }
+    if (input.updown != 0) {
         camera.height += input.updown * (current-time)*0.03;
         input.keypressed = true;
     }
@@ -242,11 +245,12 @@ function DetectKeysDown(e)
     {
     case 37:    // left cursor
     case 65:    // a
-        input.leftright = +1.;
+        input.strafe = 3.0;
         break;
     case 39:    // right cursor
     case 68:    // d
-        input.leftright = -1.;
+        input.strafe = -3.0;
+        
         break;
     case 38:    // cursor up
     case 87:    // w
@@ -263,9 +267,15 @@ function DetectKeysDown(e)
         input.updown = -2.;
         break;
     case 69:    // e
-        input.lookup = true;
+        input.leftright = -1.;
         break;
     case 81:    //q
+        input.leftright = 1.;
+        break;
+    case 84: //t
+        input.lookup = true;
+        break;
+    case 71: // g
         input.lookdown = true;
         break;
     default:
@@ -286,11 +296,11 @@ function DetectKeysUp(e)
     {
     case 37:    // left cursor
     case 65:    // a
-        input.leftright = 0;
+        input.strafe = 0;
         break;
     case 39:    // right cursor
     case 68:    // d
-        input.leftright = 0;
+        input.strafe = 0;
         break;
     case 38:    // cursor up
     case 87:    // w
@@ -307,10 +317,16 @@ function DetectKeysUp(e)
         input.updown = 0;
         break;
     case 69:    // e
-        input.lookup = false;
+        input.leftright = 0;
         break;
     case 81:    //q
-        input.lookdown = false;
+        input.leftright = 0;
+        break;
+    case 84: //t
+        input.lookup = true;
+        break;
+    case 71: // g
+        input.lookdown = true;
         break;
     default:
         return;
