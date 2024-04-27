@@ -1,5 +1,32 @@
 "use strict";
 
+class Color {
+
+    constructor(r, g, b) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+
+        this.c = Color.rgbToInt(r, g, b);
+    }
+
+    static rgbToInt(r, g, b) {
+        return (r << 16) + (g << 8) + (b)
+    }
+    
+    static intToRGB(c) {
+        return {
+            r: (c & 0xff0000) >> 16, 
+            g: (c & 0x00ff00) >> 8, 
+            b: (c & 0x0000ff)
+        };
+    }
+}
+
+
+
+
+
 // ---------------------------------------------
 // Viewer information
 
@@ -19,6 +46,7 @@ class Sphere {
         this.py = y;
         this.pz = z;
         this.r = 100;
+        this.color = new Color(255, 0, 0);
     }
 
     distance(x,y) {
@@ -32,10 +60,20 @@ class Sphere {
         return false;
     }
 
-    getBounds(x, y) {
+    /**
+     * Returns the height and color values at the requested position
+     * @param {*} x 
+     * @param {*} y 
+     * @returns 
+     */
+    getSlice(x, y) {
         var d = this.distance(x,y);
         var normalizedD = Math.min(1, d / this.r);
         var zDiff = Math.sin(Math.acos(normalizedD)) * this.r;
+
+
+
+
         return [this.pz - zDiff, this.pz + zDiff];
     }
 };
@@ -50,7 +88,10 @@ var map =
     shift:    10,  // power of two: 2^10 = 1024
     altitude: new Uint8Array(1024*1024), // 1024 * 1024 byte array with height information
     color:    new Uint32Array(1024*1024), // 1024 * 1024 int array with RGB colors
-    spheres: [new Sphere(0, 0, 300)]
+    spheres: [new Sphere(0, 0, 300)],
+    sunX: Math.sqrt(2) / 2,
+    sunY: 0,
+    sunZ: -Math.sqrt(2) / 2
 };
 
 // ---------------------------------------------
@@ -369,7 +410,7 @@ function Render() {
         deltaz += ddz; 
         rowId += 1;
     }
-    var printFlag = true;;
+
     // Draw Objects from back to front
     for (var rowId = 0; rowId < rowCount; rowId++) {
         var z = zMap[rowId];
@@ -392,23 +433,12 @@ function Render() {
                 var sphere = map.spheres[i];
                 
                 if (sphere.footprintContains(plx, ply)) {
-                    var bounds = sphere.getBounds(plx, ply);
+                    var bounds = sphere.getSlice(plx, ply);
                     var syLow = (camera.height - bounds[0]) * invz + camera.horizon|0;
                     var syHigh = (camera.height - bounds[1]) * invz + camera.horizon|0;
                               
                     syHigh = Math.min(syHigh, yMap[yId]);
                     if (syLow < yMap[yId]) {
-                        if (printFlag) {
-                            console.log("===");
-                            console.log(ply);
-                            console.log(plx);
-                            console.log(sx);
-                            console.log(syLow);
-                            console.log(syHigh);
-                            console.log(yMap[yId]);
-                            
-                            printFlag = false;
-                        }  
                         DrawVerticalLine(sx, syHigh, syLow, 0xFFFF0000);
                     }
                 }
@@ -445,53 +475,7 @@ function Draw() {
 // ---------------------------------------------
 // Init routines
 
-// Util class for downloading the png
-function DownloadImagesAsync(urls) {
-    return new Promise(function(resolve, reject) {
 
-        var pending = urls.length;
-        var result = [];
-        if (pending === 0) {
-            resolve([]);
-            return;
-        }
-        urls.forEach(function(url, i) {
-            var image = new Image();
-            //image.addEventListener("load", function() {
-            image.onload = function() {
-                var tempcanvas = document.createElement("canvas");
-                var tempcontext = tempcanvas.getContext("2d");
-                tempcanvas.width = map.width;
-                tempcanvas.height = map.height;
-                tempcontext.drawImage(image, 0, 0, map.width, map.height);
-                result[i] = tempcontext.getImageData(0, 0, map.width, map.height).data;
-                pending--;
-                if (pending === 0) {
-                    resolve(result);
-                }
-            };
-            image.src = url;
-        });
-    });
-}
-
-function LoadMap(filenames)
-{
-    var files = filenames.split(";");
-    DownloadImagesAsync(["maps/"+files[0]+".png", "maps/"+files[1]+".png"]).then(OnLoadedImages);
-}
-
-function OnLoadedImages(result)
-{
-    var datac = result[0];
-    var datah = result[1];
-    for(var i=0; i<map.width*map.height; i++)
-    {
-        map.color[i] = 0xFF000000 | (datac[(i<<2) + 2] << 16) | (datac[(i<<2) + 1] << 8) | datac[(i<<2) + 0];
-        map.altitude[i] = datah[i<<2];
-    }
-    Draw();
-}
 
 function OnResizeWindow()
 {
