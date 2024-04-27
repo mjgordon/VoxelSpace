@@ -1,7 +1,6 @@
 "use strict";
 
 class Color {
-
     constructor(r, g, b) {
         this.r = r;
         this.g = g;
@@ -11,7 +10,7 @@ class Color {
     }
 
     static rgbToInt(r, g, b) {
-        return (r << 16) + (g << 8) + (b)
+        return (255 << 24) + (r << 16) + (g << 8) + (b)
     }
     
     static intToRGB(c) {
@@ -21,11 +20,11 @@ class Color {
             b: (c & 0x0000ff)
         };
     }
+
+    mult(f) {
+        return new Color(Math.floor(this.r * f), Math.floor(this.g * f), Math.floor(this.b * f));
+    }
 }
-
-
-
-
 
 // ---------------------------------------------
 // Viewer information
@@ -42,19 +41,21 @@ var camera =
 
 class Sphere {
     constructor(x, y, z) {
-        this.px = x;
-        this.py = y;
-        this.pz = z;
+        this.position = [x, y, z];
         this.r = 100;
         this.color = new Color(255, 0, 0);
+        this.shades = [];
+        for (let n = 0.5; n <= 1.0; n += 0.1) {
+            this.shades.push(this.color.mult(n));
+        }
     }
 
     distance(x,y) {
-        return Math.sqrt(Math.pow(x - this.px, 2) + Math.pow(y - this.py, 2));
+        return vectorLength2D(vectorSub2D(this.position, [x, y]));
     }
 
     footprintContains(x, y) {
-        if (Math.abs(this.px - x) < this.r && Math.abs(this.py - y) < this.r) {
+        if (Math.abs(this.position[0] - x) < this.r && Math.abs(this.position[1] - y) < this.r) {
             return this.distance(x,y) < this.r;
         }
         return false;
@@ -67,14 +68,26 @@ class Sphere {
      * @returns 
      */
     getSlice(x, y) {
-        var d = this.distance(x,y);
-        var normalizedD = Math.min(1, d / this.r);
-        var zDiff = Math.sin(Math.acos(normalizedD)) * this.r;
+        let d = this.distance(x,y);
+        let normalizedD = Math.min(1, d / this.r);
+        let zDiff = Math.sin(Math.acos(normalizedD)) * this.r;
 
+        let zLow = this.position[2] - zDiff;
+        let zHigh = this.position[2] + zDiff;
 
+        let normalLow = vectorDivScalar(vectorSub([x, y, zLow], this.position), this.r);
+        let normalHigh = vectorDivScalar(vectorSub([x, y, zHigh], this.position), this.r);
 
+        let dotLow = vectorDot(normalLow, map.sunAngle) * -1;
+        let dotHigh = vectorDot(normalHigh, map.sunAngle) * -1;
 
-        return [this.pz - zDiff, this.pz + zDiff];
+        let factorLow = Math.max(0, dotLow);
+        let factorHigh = Math.max(0, dotHigh);
+
+        let shadeIdLow = Math.floor(factorLow * this.shades.length);
+        let shadeIdHigh = Math.floor(factorHigh * this.shades.length);
+
+        return [zLow, zHigh, shadeIdLow, shadeIdHigh];
     }
 };
 
@@ -89,9 +102,7 @@ var map =
     altitude: new Uint8Array(1024*1024), // 1024 * 1024 byte array with height information
     color:    new Uint32Array(1024*1024), // 1024 * 1024 int array with RGB colors
     spheres: [new Sphere(0, 0, 300)],
-    sunX: Math.sqrt(2) / 2,
-    sunY: 0,
-    sunZ: -Math.sqrt(2) / 2
+    sunAngle: [Math.sqrt(2) / 2, 0, Math.sqrt(2) / 2]
 };
 
 // ---------------------------------------------
@@ -409,37 +420,53 @@ function Render() {
         }
         deltaz += ddz; 
         rowId += 1;
+        
     }
 
-    // Draw Objects from back to front
-    for (var rowId = 0; rowId < rowCount; rowId++) {
-        var z = zMap[rowId];
-        var plx =  -cosang * z - sinang * z;
-        var ply =   sinang * z - cosang * z;
-        var prx =   cosang * z - sinang * z;
-        var pry =  -sinang * z - cosang * z;
+    var printFlag = true;
 
-        var dx = (prx - plx) / screenWidth;
-        var dy = (pry - ply) / screenWidth;
+    // Draw Objects from back to front
+    for (let rowId = 0; rowId < rowCount; rowId++) {
+        let z = zMap[rowId];
+        let plx =  -cosang * z - sinang * z;
+        let ply =   sinang * z - cosang * z;
+        let prx =   cosang * z - sinang * z;
+        let pry =  -sinang * z - cosang * z;
+
+        let dx = (prx - plx) / screenWidth;
+        let dy = (pry - ply) / screenWidth;
         plx += camera.x;
         ply += camera.y;
 
-        var invz = 1. / z * 240.;
+        let invz = 1. / z * 240.;
         
 
-        for (var sx = 0; sx < screenWidth | 0; sx = sx + 1 | 0) {
-            var yId =  rowId * screenWidth + sx;
-            for (var i = 0; i < map.spheres.length; i++) {
-                var sphere = map.spheres[i];
+        for (let sx = 0; sx < screenWidth | 0; sx = sx + 1 | 0) {
+            let yId =  rowId * screenWidth + sx;
+            for (let i = 0; i < map.spheres.length; i++) {
+                let sphere = map.spheres[i];
                 
                 if (sphere.footprintContains(plx, ply)) {
-                    var bounds = sphere.getSlice(plx, ply);
-                    var syLow = (camera.height - bounds[0]) * invz + camera.horizon|0;
-                    var syHigh = (camera.height - bounds[1]) * invz + camera.horizon|0;
+                    let slice = sphere.getSlice(plx, ply);
+                    let syLow = (camera.height - slice[0]) * invz + camera.horizon|0;
+                    let syHigh = (camera.height - slice[1]) * invz + camera.horizon|0;
+                    let shadeIdLow = slice[2];
+                    let shadeIdHigh = slice[3];
                               
                     syHigh = Math.min(syHigh, yMap[yId]);
                     if (syLow < yMap[yId]) {
-                        DrawVerticalLine(sx, syHigh, syLow, 0xFFFF0000);
+                        let segSize = Math.floor((syLow - syHigh) / sphere.shades.length);
+                        for (let segmentId = 0; segmentId < sphere.shades.length; segmentId++) {
+                            let top = syHigh + (segSize * segmentId);
+                            let shadeId = Math.floor(((segmentId / sphere.shades.length) * (shadeIdHigh - shadeIdLow)) + shadeIdLow);
+                            if (printFlag) {
+                                console.log(shadeId);
+                                console.log(sphere);
+                                console.log(sphere.shades[shadeId].c);
+                                printFlag = false;
+                            }
+                            DrawVerticalLine(sx, top, top + segSize, sphere.shades[shadeId].c);
+                        }
                     }
                 }
             }
