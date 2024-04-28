@@ -64,19 +64,21 @@ class Box extends Geometry {
         let normalLow = [0, 0, -1];
         let normalHigh = [0, 0, 1];
 
-        if ((this.dimensionsHalf[0] - (x - this.position[0])) < (this.dimensions[0] * 0.1)) {
+        let edge = 0.02;
+
+        if ((this.dimensionsHalf[0] - (x - this.position[0])) < (this.dimensions[0] * edge)) {
             normalLow = [1, 0, 0];
             normalHigh = [1, 0, 0];
         }
-        else if ((this.dimensionsHalf[0] - (this.position[0] - x)) < (this.dimensions[0] * 0.1)) {
+        else if ((this.dimensionsHalf[0] - (this.position[0] - x)) < (this.dimensions[0] * edge)) {
             normalLow = [-1, 0, 0];
             normalHigh = [-1, 0, 0];
         }
-        else if ((this.dimensionsHalf[1] - (y - this.position[1])) < (this.dimensions[1] * 0.1)) {
+        else if ((this.dimensionsHalf[1] - (y - this.position[1])) < (this.dimensions[1] * edge)) {
             normalLow = [0, 1, 0];
             normalHigh = [0, 1, 0];
         }
-        else if ((this.dimensionsHalf[1] - (this.position[1] - y)) < (this.dimensions[1] * 0.1)) {
+        else if ((this.dimensionsHalf[1] - (this.position[1] - y)) < (this.dimensions[1] * edge)) {
             normalLow = [0, -1, 0];
             normalHigh = [0, -1, 0];
         }
