@@ -10,7 +10,7 @@ class Color {
     }
 
     static rgbToInt(r, g, b) {
-        return (255 << 24) + (r << 16) + (g << 8) + (b)
+        return (255 << 24) + (b << 16) + (g << 8) + (r)
     }
     
     static intToRGB(c) {
@@ -39,11 +39,74 @@ var camera =
     distance: 800   // distance of map
 };
 
-class Sphere {
-    constructor(x, y, z) {
-        this.position = [x, y, z];
+
+class Geometry {
+     constructor(position) {
+        this.position = position;
+     }
+
+}
+
+class Box extends Geometry {
+    constructor(position) {
+        super(position);
+        this.dimensions = [100,200,300];
+        this.dimensionsHalf = vectorMultScalar(this.dimensions, 0.5);
+        this.color = new Color(0, 255, 0);
+
+        this.shades = [];
+        for (let n = 0.5; n <= 1.0; n += 0.1) {
+            this.shades.push(this.color.mult(n));
+        }
+
+    }
+
+    footprintContains(x, y) {
+        return Math.abs(this.position[0] - x) < this.dimensionsHalf[0] && Math.abs(this.position[1] - y) < this.dimensionsHalf[1];
+    }
+
+    getSlice(x, y) {
+        let zLow = this.position[2] - this.dimensionsHalf[2];
+        let zHigh = this.position[2] + this.dimensionsHalf[2];
+
+        let normalLow = [0, 0, -1];
+        let normalHigh = [0, 0, 1];
+
+        if ((this.dimensionsHalf[0] - (x - this.position[0])) < (this.dimensions[0] * 0.1)) {
+            normalLow = [1, 0, 0];
+            normalHigh = [1, 0, 0];
+        }
+        else if ((this.dimensionsHalf[0] - (this.position[0] - x)) < (this.dimensions[0] * 0.1)) {
+            normalLow = [-1, 0, 0];
+            normalHigh = [-1, 0, 0];
+        }
+        else if ((this.dimensionsHalf[1] - (y - this.position[1])) < (this.dimensions[1] * 0.1)) {
+            normalLow = [0, 1, 0];
+            normalHigh = [0, 1, 0];
+        }
+        else if ((this.dimensionsHalf[1] - (this.position[1] - y)) < (this.dimensions[1] * 0.1)) {
+            normalLow = [0, -1, 0];
+            normalHigh = [0, -1, 0];
+        }
+
+        let dotLow = vectorDot(normalLow, map.sunAngle) * -1;
+        let dotHigh = vectorDot(normalHigh, map.sunAngle) * -1;
+
+        let factorLow = Math.max(0, dotLow);
+        let factorHigh = Math.max(0, dotHigh);
+
+        let shadeIdLow = Math.floor(factorLow * this.shades.length);
+        let shadeIdHigh = Math.floor(factorHigh * this.shades.length);
+
+        return [zLow, zHigh, shadeIdLow, shadeIdHigh];
+    }
+}
+
+class Sphere extends Geometry {
+    constructor(position) {
+        super(position);
         this.r = 100;
-        this.color = new Color(255, 0, 0);
+        this.color = new Color(0, 0, 255);
         this.shades = [];
         for (let n = 0.5; n <= 1.0; n += 0.1) {
             this.shades.push(this.color.mult(n));
@@ -101,8 +164,8 @@ var map =
     shift:    10,  // power of two: 2^10 = 1024
     altitude: new Uint8Array(1024*1024), // 1024 * 1024 byte array with height information
     color:    new Uint32Array(1024*1024), // 1024 * 1024 int array with RGB colors
-    spheres: [new Sphere(0, 0, 300)],
-    sunAngle: [-Math.sqrt(2) / 2, 0, Math.sqrt(2) / 2]
+    spheres: [new Sphere([0, 0, 300]), new Box([100, 100, 300])],
+    sunAngle: [Math.sqrt(2) / 2, 0, Math.sqrt(2) / 2]
 };
 
 // ---------------------------------------------
@@ -442,7 +505,7 @@ function Render() {
     var printFlag = true;
 
     // Draw Objects from back to front
-    for (let rowId = 0; rowId < rowCount; rowId++) {
+    for (let rowId = rowCount - 1; rowId >= 0; rowId--) {
         let z = zMap[rowId];
         let plx =  -cosang * z - sinang * z;
         let ply =   sinang * z - cosang * z;

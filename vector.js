@@ -15,6 +15,11 @@ function vectorLength2D(v) {
 }
 
 
+function vectorMultScalar(v, s) {
+    return [v[0] * s, v[1] * s, v[2] * s];
+}
+
+
 function vectorDivScalar(v, s) {
     return [v[0] / s, v[1] / s, v[2] / s];
 }

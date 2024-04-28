@@ -28,18 +28,17 @@ function DownloadImagesAsync(urls) {
     });
 }
 
-function LoadMap(filenames)
-{
+
+function LoadMap(filenames) {
     var files = filenames.split(";");
     DownloadImagesAsync(["maps/"+files[0]+".png", "maps/"+files[1]+".png"]).then(OnLoadedImages);
 }
 
-function OnLoadedImages(result)
-{
+
+function OnLoadedImages(result) {
     var datac = result[0];
     var datah = result[1];
-    for(var i=0; i<map.width*map.height; i++)
-    {
+    for(var i=0; i<map.width*map.height; i++) {
         map.color[i] = 0xFF000000 | (datac[(i<<2) + 2] << 16) | (datac[(i<<2) + 1] << 8) | datac[(i<<2) + 0];
         map.altitude[i] = datah[i<<2];
     }
