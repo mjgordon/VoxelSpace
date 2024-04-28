@@ -12,14 +12,6 @@ class Color {
     static rgbToInt(r, g, b) {
         return (255 << 24) + (b << 16) + (g << 8) + (r)
     }
-    
-    static intToRGB(c) {
-        return {
-            r: (c & 0xff0000) >> 16, 
-            g: (c & 0x00ff00) >> 8, 
-            b: (c & 0x0000ff)
-        };
-    }
 
     mult(f) {
         return new Color(Math.floor(this.r * f), Math.floor(this.g * f), Math.floor(this.b * f));
@@ -108,7 +100,7 @@ class Sphere extends Geometry {
         this.r = 100;
         this.color = new Color(0, 0, 255);
         this.shades = [];
-        for (let n = 0.5; n <= 1.0; n += 0.1) {
+        for (let n = 0.5; n <= 1.0; n += 0.03125) {
             this.shades.push(this.color.mult(n));
         }
     }
@@ -462,7 +454,6 @@ function Render() {
         deltaz += ddz;
         rowCount += 1;
     }
-    console.log(rowCount);
 
     // Record the hidden y values as they are after each row
     var yMap = new Uint32Array(screenWidth * rowCount)
@@ -502,7 +493,7 @@ function Render() {
         
     }
 
-    var printFlag = true;
+    let printFlag = true;
 
     // Draw Objects from back to front
     for (let rowId = rowCount - 1; rowId >= 0; rowId--) {
@@ -517,8 +508,7 @@ function Render() {
         plx += camera.x;
         ply += camera.y;
 
-        let invz = 1. / z * 240.;
-        
+        let invz = 1. / z * 240.;        
 
         for (let sx = 0; sx < screenWidth | 0; sx = sx + 1 | 0) {
             let yId =  rowId * screenWidth + sx;
@@ -534,16 +524,13 @@ function Render() {
                               
                     syHigh = Math.min(syHigh, yMap[yId]);
                     if (syLow < yMap[yId]) {
-                        let segSize = Math.floor((syLow - syHigh) / sphere.shades.length);
-                        for (let segmentId = 0; segmentId < sphere.shades.length; segmentId++) {
+                        let segCount = Math.abs(shadeIdHigh - shadeIdLow) + 1;
+
+                        let segSize = (syLow - syHigh) / segCount;
+                        for (let segmentId = 0; segmentId < segCount; segmentId++) {
                             let top = syHigh + (segSize * segmentId);
-                            let shadeId = Math.floor(((segmentId / sphere.shades.length) * (shadeIdHigh - shadeIdLow)) + shadeIdLow);
-                            if (printFlag) {
-                                console.log(shadeId);
-                                console.log(sphere);
-                                console.log(sphere.shades[shadeId].c);
-                                printFlag = false;
-                            }
+                            let shadeId = Math.floor(((segmentId / segCount) * (shadeIdHigh - shadeIdLow)) + shadeIdLow);
+
                             DrawVerticalLine(sx, top, top + segSize, sphere.shades[shadeId].c);
                         }
                     }
